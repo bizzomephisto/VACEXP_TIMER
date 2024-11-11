@@ -1,0 +1,475 @@
+<!--
+    Timer Control Webpage
+    Author: Benjamin Beaugh
+    Created: 11/10/2024
+
+    This code is free to use, modify, and distribute, provided that the following conditions are met:
+    - The original author (Benjamin Beaugh) must be credited in all copies or substantial portions of the code.
+    - This code is provided "as-is," without warranty of any kind, express or implied.
+
+    You are free to:
+    - Use this code for personal or commercial purposes.
+    - Modify and share this code, as long as this license header is retained.
+
+    No liability:
+    - The author is not liable for any damage or loss resulting from the use of this code.
+
+    This project aims to foster learning and creativity by making software freely available.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Control</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        .timer-container {
+            margin: 10px;
+        }
+        .timer-label {
+            font-size: 2em;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .blinking-dot {
+            position: absolute;
+            width: 30px;
+            height: 15px;
+            background-color: red;
+            border-radius: 5%;
+            animation: blink 1s infinite;
+            display: none;
+        }
+        .blinking-dot.left {
+            left: 55px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .blinking-dot.right {
+            right: 55px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        @keyframes container-blink {
+            0% { background-color: black; }
+            50% { background-color: red; }
+            100% { background-color: black; }
+        }
+        .timer-container.blinking {
+            animation: container-blink 1s infinite;
+        }
+        .timer-value {
+            font-size: 4em;
+            color: #f0f000;
+        }
+        .arrows {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 3px;
+        }
+        .arrow {
+            cursor: pointer;
+            font-size: 3.5em;
+        }
+        #start-button {
+            background-color: green;
+            color: white;
+            font-size: 2em;
+            padding: 10px 40px;
+            border: none;
+            cursor: pointer;
+        }
+        #start-button.cancel {
+            background-color: red;
+        }
+        #fullscreen-button {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50px;
+            height: 50px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        #debug-message {
+            font-size: 1.5em;
+            color: yellow;
+            margin-top: 20px;
+            display: none;
+        }
+        #proceed-container {
+            margin-top: 20px;
+        }
+        #interface-container {
+            display: none;
+        }
+        #preset-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: black;
+            color: white;
+            padding: 20px;
+            border: 2px solid white;
+            border-radius: 10px;
+            z-index: 1000;
+        }
+        #save-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: black;
+            color: white;
+            padding: 20px;
+            border: 2px solid white;
+            border-radius: 10px;
+            z-index: 1000;
+        }
+    </style>
+    <script>
+        let vacTime = 10.5;
+        let expTime = 10.5;
+        let initialVacTime = vacTime;
+        let initialExpTime = expTime;
+        let preset1 = { vac: 5, exp: 5 };
+        let preset2 = { vac: 10, exp: 10 };
+        let preset3 = { vac: 15, exp: 15 };
+        let countdownInterval;
+        let currentTimer = 'VAC';
+        const ESP_IP_ADDRESS = "http://192.168.4.1"; // Replace with your ESP8266 IP address
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Document loaded');
+            document.getElementById('debug-message').innerText = 'Initializing...';
+            document.getElementById('debug-message').style.display = 'block';
+
+            // Automatically enter fullscreen mode
+            enterFullscreen();
+
+            // Attempt to connect to the ESP8266 server
+            sendRequest('/')
+                .then(() => {
+                    document.getElementById('debug-message').innerText = 'Connected to server. Press the button to proceed.';
+                    console.log('Connected to server');
+                })
+                .catch(error => {
+                    document.getElementById('debug-message').innerText = `Failed to connect: ${error.message}`;
+                    console.error('Failed to connect:', error);
+                });
+
+            // Add event listener for proceed button
+            const proceedButton = document.getElementById('proceed-button');
+            if (proceedButton) {
+                proceedButton.addEventListener('click', () => {
+                    console.log('Proceed button clicked');
+                    document.getElementById('proceed-container').style.display = 'none';
+                    document.getElementById('debug-message').style.display = 'none';
+                    document.getElementById('interface-container').style.display = 'block';
+                    updateTimerDisplay();
+                });
+            } else {
+                console.error('Proceed button not found');
+            }
+
+            // Add event listener for fullscreen button
+            document.getElementById('fullscreen-button').addEventListener('click', () => {
+                enterFullscreen();
+            });
+
+            // Add event listener for presets button
+            document.getElementById('presets-button').addEventListener('click', () => {
+                showPresetsPopup();
+            });
+
+            // Add event listener for start button
+            document.getElementById('start-button').addEventListener('click', () => {
+                if (document.getElementById('start-button').classList.contains('cancel')) {
+                    cancelTimers();
+                } else {
+                    startTimers();
+                }
+            });
+        });
+
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.mozRequestFullScreen) { // Firefox
+                elem.mozRequestFullScreen();
+            } else if (elem.webkitRequestFullscreen) { // Chrome, Safari, and Opera
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { // IE/Edge
+                elem.msRequestFullscreen();
+            }
+        }
+
+        function updateTimerDisplay() {
+            console.log('Updating timer display');
+            const vacValueElement = document.getElementById('vac-value');
+            const expValueElement = document.getElementById('exp-value');
+            if (vacValueElement && expValueElement) {
+                vacValueElement.innerText = vacTime.toFixed(1);
+                expValueElement.innerText = expTime.toFixed(1);
+            } else {
+                console.error('Timer value elements not found');
+            }
+        }
+
+        function incrementVac(value) {
+            vacTime = Math.max(0, vacTime + value);
+            updateTimerDisplay();
+        }
+
+        function incrementExp(value) {
+            expTime = Math.max(0, expTime + value);
+            updateTimerDisplay();
+        }
+
+        function startTimers() {
+            console.log('Starting timers');
+            disableButtons();
+            initialVacTime = vacTime;
+            initialExpTime = expTime;
+            document.getElementById('start-button').innerText = 'CANCEL';
+            document.getElementById('start-button').classList.add('cancel');
+            latchVac();
+            currentTimer = 'VAC';
+            document.querySelector('.timer-container:nth-of-type(1)').classList.add('blinking');
+            countdown(vacTime, () => {
+                document.querySelector('.timer-container:nth-of-type(1)').classList.remove('blinking');
+                latchExp();
+                currentTimer = 'EXP';
+                document.querySelector('.timer-container:nth-of-type(2)').classList.add('blinking');
+                countdown(expTime, () => {
+                    document.querySelector('.timer-container:nth-of-type(2)').classList.remove('blinking');
+                    unlatchAll();
+                    resetButton();
+                });
+            });
+        }
+
+        function cancelTimers() {
+            console.log('Cancelling timers');
+            clearInterval(countdownInterval);
+            document.querySelectorAll('.timer-container').forEach(container => container.classList.remove('blinking'));
+            unlatchAll();
+            resetButton();
+        }
+
+        function resetButton() {
+            console.log('Resetting button');
+            enableButtons();
+            vacTime = initialVacTime;
+            expTime = initialExpTime;
+            updateTimerDisplay();
+            document.getElementById('start-button').innerText = 'START';
+            document.getElementById('start-button').classList.remove('cancel');
+        }
+
+        function countdown(time, callback) {
+            console.log('Starting countdown:', currentTimer);
+            countdownInterval = setInterval(() => {
+                if (currentTimer === 'VAC') {
+                    vacTime = Math.max(0, vacTime - 0.5);
+                    if (vacTime === 0) {
+                        document.getElementById('vac-dot-left').style.display = 'none';
+                        document.getElementById('vac-dot-right').style.display = 'none';
+                    }
+                } else if (currentTimer === 'EXP') {
+                    expTime = Math.max(0, expTime - 0.5);
+                }
+                updateTimerDisplay();
+
+                if (time <= 0) {
+                    clearInterval(countdownInterval);
+                    callback();
+                }
+                time -= 0.5;
+            }, 500);
+        }
+
+        async function sendRequest(url) {
+            try {
+                console.log(`Sending request to ${ESP_IP_ADDRESS}${url}`);
+                const response = await fetch(`${ESP_IP_ADDRESS}${url}`);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const data = await response.text();
+                console.log('Response received:', data);
+                document.getElementById('debug-message').innerText = `Received response: ${data}`;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('debug-message').innerText = `Error: ${error.message}`;
+            }
+        }
+
+        function latchVac() {
+            console.log('Latching VAC');
+            document.getElementById('vac-dot-left').style.display = 'block';
+            document.getElementById('vac-dot-right').style.display = 'block';
+            sendRequest('/toggleVac'); // Updated to match ESP8266 endpoint
+        }
+
+        function latchExp() {
+            console.log('Latching EXP');
+            document.getElementById('exp-dot-left').style.display = 'block';
+            document.getElementById('exp-dot-right').style.display = 'block';
+            sendRequest('/toggleExp'); // Updated to match ESP8266 endpoint
+        }
+
+        function unlatchAll() {
+            console.log('Unlatching all relays');
+            document.getElementById('vac-dot-left').style.display = 'none';
+            document.getElementById('vac-dot-right').style.display = 'none';
+            document.getElementById('exp-dot-left').style.display = 'none';
+            document.getElementById('exp-dot-right').style.display = 'none';
+            sendRequest('/unlatchAll'); // Keep this in case ESP has an endpoint to turn off all relays
+        }
+
+        function disableButtons() {
+            console.log('Disabling buttons');
+            const buttons = document.querySelectorAll('.arrow, #presets-button');
+            buttons.forEach(button => {
+                button.disabled = true;
+                button.style.pointerEvents = 'none';
+                button.style.opacity = '0.5';
+            });
+        }
+
+        function enableButtons() {
+            console.log('Enabling buttons');
+            const buttons = document.querySelectorAll('.arrow, #presets-button');
+            buttons.forEach(button => {
+                button.disabled = false;
+                button.style.pointerEvents = 'auto';
+                button.style.opacity = '1';
+            });
+        }
+
+        function showPresetsPopup() {
+            console.log('Showing presets popup');
+            disableButtons();
+            const presetPopup = document.createElement('div');
+            presetPopup.id = 'preset-popup';
+
+            const presets = [
+                { name: 'PRESET 1', data: preset1 },
+                { name: 'PRESET 2', data: preset2 },
+                { name: 'PRESET 3', data: preset3 }
+            ];
+
+            presets.forEach((preset) => {
+                const button = document.createElement('button');
+                button.innerText = preset.name;
+                button.style.display = 'block';
+                button.style.width = '100%';
+                button.style.marginBottom = '10px';
+                button.style.fontSize = '1.5em';
+                button.onclick = () => {
+                    vacTime = preset.data.vac;
+                    expTime = preset.data.exp;
+                    updateTimerDisplay();
+                    document.body.removeChild(presetPopup);
+                    enableButtons();
+                };
+                button.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    preset.data.vac = vacTime;
+                    preset.data.exp = expTime;
+                    showSavePopup(`${preset.name} saved with current VAC and EXP values.`);
+                };
+                presetPopup.appendChild(button);
+            });
+
+            const closeButton = document.createElement('button');
+            closeButton.innerText = 'CLOSE';
+            closeButton.style.display = 'block';
+            closeButton.style.width = '100%';
+            closeButton.style.fontSize = '1.5em';
+            closeButton.onclick = () => {
+                document.body.removeChild(presetPopup);
+                enableButtons();
+            };
+            presetPopup.appendChild(closeButton);
+
+            document.body.appendChild(presetPopup);
+        }
+
+        function showSavePopup(message) {
+            console.log('Showing save popup');
+            const savePopup = document.createElement('div');
+            savePopup.id = 'save-popup';
+            savePopup.innerText = message;
+
+            const closeButton = document.createElement('button');
+            closeButton.innerText = 'OK';
+            closeButton.style.display = 'block';
+            closeButton.style.width = '100%';
+            closeButton.style.fontSize = '1.5em';
+            closeButton.onclick = () => {
+                document.body.removeChild(savePopup);
+            };
+            savePopup.appendChild(closeButton);
+
+            document.body.appendChild(savePopup);
+        }
+    </script>
+</head>
+<body>
+    <button id="fullscreen-button"></button>
+    <div id="debug-message">Debugging info will be shown here...</div>
+    <div id="proceed-container">
+        <p>Connection established. Press "Proceed" to continue.</p>
+        <button id="proceed-button">Proceed</button>
+    </div>
+    <div id="interface-container">
+        <div class="timer-container" style="border: 2px solid white; padding: 20px; border-radius: 10px; display: block;">
+            <div class="timer-label">VAC
+                <span class="blinking-dot left" id="vac-dot-left"></span>
+                <span class="blinking-dot right" id="vac-dot-right"></span>
+            </div>
+            <div class="timer-value" id="vac-value">10.5</div>
+            <div class="arrows">
+                <span class="arrow" onclick="incrementVac(0.5)">&#x25B2;</span>
+                <span class="arrow" onclick="incrementVac(-0.5)">&#x25BC;</span>
+                <span class="arrow" onclick="incrementVac(10)">&#x25B2;</span>
+                <span class="arrow" onclick="incrementVac(-10)">&#x25BC;</span>
+            </div>
+        </div>
+        <div class="timer-container" style="border: 2px solid white; padding: 20px; border-radius: 10px; display: block;">
+            <div class="timer-label">EXP
+                <span class="blinking-dot left" id="exp-dot-left"></span>
+                <span class="blinking-dot right" id="exp-dot-right"></span>
+            </div>
+            <div class="timer-value" id="exp-value">10.5</div>
+            <div class="arrows">
+                <span class="arrow" onclick="incrementExp(0.5)">&#x25B2;</span>
+                <span class="arrow" onclick="incrementExp(-0.5)">&#x25BC;</span>
+                <span class="arrow" onclick="incrementExp(10)">&#x25B2;</span>
+                <span class="arrow" onclick="incrementExp(-10)">&#x25BC;</span>
+            </div>
+        </div>
+        <button id="start-button">START</button>
+        <button id="presets-button" style="background-color: blue; color: white; font-size: 2em; padding: 10px 40px; border: none; cursor: pointer; margin-left: 20px;">P</button>
+    </div>
+</body>
+</html>

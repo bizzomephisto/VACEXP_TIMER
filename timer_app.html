@@ -214,7 +214,7 @@
                 elem.requestFullscreen();
             } else if (elem.mozRequestFullScreen) { // Firefox
                 elem.mozRequestFullScreen();
-            } else if (elem.webkitRequestFullscreen) { // Chrome, Safari, and Opera
+            } else if (elem.webkitRequestFullscreen) { 
                 elem.webkitRequestFullscreen();
             } else if (elem.msRequestFullscreen) { // IE/Edge
                 elem.msRequestFullscreen();
@@ -326,14 +326,14 @@
             console.log('Latching VAC');
             document.getElementById('vac-dot-left').style.display = 'block';
             document.getElementById('vac-dot-right').style.display = 'block';
-            sendRequest('/toggleVac'); // Updated to match ESP8266 endpoint
+            sendRequest('/toggleVac'); // U ESP8266 endpoint
         }
 
         function latchExp() {
             console.log('Latching EXP');
             document.getElementById('exp-dot-left').style.display = 'block';
             document.getElementById('exp-dot-right').style.display = 'block';
-            sendRequest('/toggleExp'); // Updated to match ESP8266 endpoint
+            sendRequest('/toggleExp'); // ESP8266 endpoint
         }
 
         function unlatchAll() {
@@ -342,7 +342,7 @@
             document.getElementById('vac-dot-right').style.display = 'none';
             document.getElementById('exp-dot-left').style.display = 'none';
             document.getElementById('exp-dot-right').style.display = 'none';
-            sendRequest('/unlatchAll'); // Keep this in case ESP has an endpoint to turn off all relays
+            sendRequest('/unlatchAll'); // unlatch all relays
         }
 
         function disableButtons() {

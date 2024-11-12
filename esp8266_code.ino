@@ -71,7 +71,7 @@ void setup() {
 
   server.on("/", []() {
     Serial.println("Client connected");
-    server.send(200, "text/plain", "You shouldn't be seeing this. The fact that you have means it's working");
+    server.send(200, "text/plain", "You shouldn't be seeing this. The fact that you are means it's working");
   });
 
   server.begin();

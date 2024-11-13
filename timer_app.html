@@ -148,12 +148,13 @@
         let expTime = 10.5;
         let initialVacTime = vacTime;
         let initialExpTime = expTime;
-        let preset1 = { vac: 5, exp: 5 };
-        let preset2 = { vac: 10, exp: 10 };
-        let preset3 = { vac: 15, exp: 15 };
         let countdownInterval;
         let currentTimer = 'VAC';
-        const ESP_IP_ADDRESS = "http://192.168.4.1"; // ESP8266 IP address
+        const ESP_IP_ADDRESS = "http://192.168.4.1"; // Replace with your ESP8266 IP address
+
+        // Sound files
+        const dingSound = new Audio('ding.mp3');
+        const ascendingDingSound = new Audio('ascending-ding.mp3');
 
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Document loaded');
@@ -193,17 +194,13 @@
                 enterFullscreen();
             });
 
-            // Add event listener for presets button
-            document.getElementById('presets-button').addEventListener('click', () => {
-                showPresetsPopup();
-            });
-
             // Add event listener for start button
             document.getElementById('start-button').addEventListener('click', () => {
                 if (document.getElementById('start-button').classList.contains('cancel')) {
                     cancelTimers();
                 } else {
                     startTimers();
+                    dingSound.play(); // Play ding sound on start button press
                 }
             });
         });
@@ -214,7 +211,7 @@
                 elem.requestFullscreen();
             } else if (elem.mozRequestFullScreen) { // Firefox
                 elem.mozRequestFullScreen();
-            } else if (elem.webkitRequestFullscreen) { 
+            } else if (elem.webkitRequestFullscreen) { // Chrome, Safari, and Opera
                 elem.webkitRequestFullscreen();
             } else if (elem.msRequestFullscreen) { // IE/Edge
                 elem.msRequestFullscreen();
@@ -233,16 +230,6 @@
             }
         }
 
-        function incrementVac(value) {
-            vacTime = Math.max(0, vacTime + value);
-            updateTimerDisplay();
-        }
-
-        function incrementExp(value) {
-            expTime = Math.max(0, expTime + value);
-            updateTimerDisplay();
-        }
-
         function startTimers() {
             console.log('Starting timers');
             disableButtons();
@@ -257,9 +244,11 @@
                 document.querySelector('.timer-container:nth-of-type(1)').classList.remove('blinking');
                 latchExp();
                 currentTimer = 'EXP';
+                dingSound.play(); // Play ding sound when EXP starts
                 document.querySelector('.timer-container:nth-of-type(2)').classList.add('blinking');
                 countdown(expTime, () => {
                     document.querySelector('.timer-container:nth-of-type(2)').classList.remove('blinking');
+                    ascendingDingSound.play(); // Play ascending dings when all timers are done
                     unlatchAll();
                     resetButton();
                 });
@@ -326,14 +315,14 @@
             console.log('Latching VAC');
             document.getElementById('vac-dot-left').style.display = 'block';
             document.getElementById('vac-dot-right').style.display = 'block';
-            sendRequest('/toggleVac'); // U ESP8266 endpoint
+            sendRequest('/toggleVac'); // Updated to match ESP8266 endpoint
         }
 
         function latchExp() {
             console.log('Latching EXP');
             document.getElementById('exp-dot-left').style.display = 'block';
             document.getElementById('exp-dot-right').style.display = 'block';
-            sendRequest('/toggleExp'); // ESP8266 endpoint
+            sendRequest('/toggleExp'); // Updated to match ESP8266 endpoint
         }
 
         function unlatchAll() {
@@ -342,7 +331,7 @@
             document.getElementById('vac-dot-right').style.display = 'none';
             document.getElementById('exp-dot-left').style.display = 'none';
             document.getElementById('exp-dot-right').style.display = 'none';
-            sendRequest('/unlatchAll'); // unlatch all relays
+            sendRequest('/unlatchAll'); // Keep this in case ESP has an endpoint to turn off all relays
         }
 
         function disableButtons() {
@@ -363,74 +352,6 @@
                 button.style.pointerEvents = 'auto';
                 button.style.opacity = '1';
             });
-        }
-
-        function showPresetsPopup() {
-            console.log('Showing presets popup');
-            disableButtons();
-            const presetPopup = document.createElement('div');
-            presetPopup.id = 'preset-popup';
-
-            const presets = [
-                { name: 'PRESET 1', data: preset1 },
-                { name: 'PRESET 2', data: preset2 },
-                { name: 'PRESET 3', data: preset3 }
-            ];
-
-            presets.forEach((preset) => {
-                const button = document.createElement('button');
-                button.innerText = preset.name;
-                button.style.display = 'block';
-                button.style.width = '100%';
-                button.style.marginBottom = '10px';
-                button.style.fontSize = '1.5em';
-                button.onclick = () => {
-                    vacTime = preset.data.vac;
-                    expTime = preset.data.exp;
-                    updateTimerDisplay();
-                    document.body.removeChild(presetPopup);
-                    enableButtons();
-                };
-                button.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    preset.data.vac = vacTime;
-                    preset.data.exp = expTime;
-                    showSavePopup(`${preset.name} saved with current VAC and EXP values.`);
-                };
-                presetPopup.appendChild(button);
-            });
-
-            const closeButton = document.createElement('button');
-            closeButton.innerText = 'CLOSE';
-            closeButton.style.display = 'block';
-            closeButton.style.width = '100%';
-            closeButton.style.fontSize = '1.5em';
-            closeButton.onclick = () => {
-                document.body.removeChild(presetPopup);
-                enableButtons();
-            };
-            presetPopup.appendChild(closeButton);
-
-            document.body.appendChild(presetPopup);
-        }
-
-        function showSavePopup(message) {
-            console.log('Showing save popup');
-            const savePopup = document.createElement('div');
-            savePopup.id = 'save-popup';
-            savePopup.innerText = message;
-
-            const closeButton = document.createElement('button');
-            closeButton.innerText = 'OK';
-            closeButton.style.display = 'block';
-            closeButton.style.width = '100%';
-            closeButton.style.fontSize = '1.5em';
-            closeButton.onclick = () => {
-                document.body.removeChild(savePopup);
-            };
-            savePopup.appendChild(closeButton);
-
-            document.body.appendChild(savePopup);
         }
     </script>
 </head>
@@ -473,3 +394,4 @@
     </div>
 </body>
 </html>
+
